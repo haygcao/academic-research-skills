@@ -1,6 +1,6 @@
 # Academic Research Skills for Claude Code
 
-[![Version](https://img.shields.io/badge/version-v3.9.4.2-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.9.4.2)
+[![Version](https://img.shields.io/badge/version-v3.11.0-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.11.0)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Sponsor](https://img.shields.io/badge/sponsor-Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://buymeacoffee.com/crucify020v)
 
@@ -232,15 +232,15 @@ ARS Stage 2 寫作      →  用驗證過的實驗結果撰寫論文
 
 13 個 Agent 的研究團隊。模式：full、quick、review、lit-review、fact-check、socratic、systematic-review。完整 agent 名單與產出物：見 ARCHITECTURE.md §3。
 
-### Academic Paper (v3.1.2)
+### Academic Paper (v3.2.0)
 
 12 個 Agent 的論文撰寫 pipeline。模式：full、plan、outline-only、revision、revision-coach、abstract-only、lit-review、format-convert、citation-check、disclosure。輸出：MD + DOCX（Pandoc 可用時）+ LaTeX（APA 7.0 `apa7` class / IEEE / Chicago）→ tectonic 編譯 PDF。完整 agent 名單與各 phase 職責：見 ARCHITECTURE.md §3。
 
-### Academic Paper Reviewer (v1.9.1)
+### Academic Paper Reviewer (v1.10.0)
 
 7 個 Agent 的多視角審查，搭配 **0-100 品質量表**。模式：full、re-review、quick、methodology-focus、guided、calibration。**決策對照：** ≥80 接受、65-79 小修、50-64 大修、<50 退稿。第一輪審查團隊 vs. 精簡再審團隊的分界：見 ARCHITECTURE.md §3 Stage 3 / Stage 3'。
 
-### Academic Pipeline (v3.9.4.2)
+### Academic Pipeline (v3.11.0)
 
 10 階段調度器，含誠信驗證、兩階段審查、蘇格拉底指導、協作品質評估。Pipeline 保證：每個階段都需使用者確認 checkpoint；誠信驗證（Stage 2.5 + 4.5）不可跳過；R&R 追溯矩陣（Schema 11）獨立驗證作者修訂宣稱。v3.4 新增 Compliance Agent（PRISMA-trAIce + RAISE）於 Stage 2.5 / 4.5。v3.5 新增 **協作深度觀察員**（`collaboration_depth_agent`，僅諮詢性質、永不阻擋流程）於每一次 FULL/SLIM checkpoint 與 pipeline 完成時。MANDATORY 誠信閘門（2.5 / 4.5）明確跳過觀察員，避免稀釋合規檢查。理論基礎：Wang & Zhang (2026), IJETHE 23:11。逐階段矩陣（agent、產出物、閘門）：見 ARCHITECTURE.md §3。
 
@@ -303,6 +303,14 @@ https://github.com/Imbad0202/academic-research-skills
 ---
 
 ## 更新紀錄
+
+### v3.11.0（2026-06-04）— 確定性引用查驗 gate（#182）
+
+> 新增一道**確定性的引用存在性查驗 gate**，獨立於 LLM 同儕審查運作。每筆引用都會比對最多四個書目索引（Semantic Scholar、OpenAlex、Crossref，以及新增的 **arXiv resolver**，`scripts/arxiv_client.py`，不需 API key），把每筆引用的 `lookup_verified` 狀態（`{true, false, unresolvable}`）寫進統一彙整。捏造、帶著查不到的 DOI/arXiv ID 的引用，因此被 lookup 偵測標示出來（在使用者選用 strict 時才升級為終止），而非寄望審查 agent 注意到。這道 gate **沿用 v3.10 `terminal_policies` 的 opt-in 模型**：偵測一律執行，但 `lookup_verified == false` 的列只有在使用者選用 `terminal_policies.citation_existence == strict` 時才是終止性的；預設行為是 advisory、可用 `/ars-mark-read` 認可。`false` 的定義刻意**收窄到 ID-keyed unmatched**（一次以精確 DOI/arXiv 查驗、卻證實查不到），因此正當但未被索引的人文 / 非英語 / 區域期刊引用會落在 `unresolvable`、永不阻擋（這是文件中載明的「精確優先於召回」取捨）。本版另含持久化 SQLite 查驗 cache（`~/.cache/ars/verification.db`，90 天 TTL）搭配 `/ars-cache-invalidate` 指令、獨立的 `verification_gate` API 與 `verify_passport.py` CLI，以及把 v3.9.0 污染三角驗證矩陣擴成四索引（k=0..4，全屬 advisory）。`academic-pipeline` 追 suite 至 v3.11.0，其餘三個 skill 版號不變。規格：`docs/design/2026-05-21-v3.10-182-promote-citation-gate-spec.md`（§0 amendment + C-V6）。
+
+### v3.10.0（2026-06-01）— 三角驗證政策層、Kong 綜述採納、評測 harness、scoped-write guard
+
+> Minor release，打包數項工作：可選用的污染三角驗證 **terminal 政策層**（#127，預設引用行為與 v3.9.0 byte-equivalent）；**Kong et al. 2026 綜述採納**，包含 Rebuttal Commitment Ledger（#256/#266/#268/#269）與依學門的 domain evidence profile（#259）；**v3.10 量測基建**，通用化評測 gold set 加 ranking-lift CI gate（#184）；**scoped-write guard MVP**（#134），一個 deterministic `PreToolUse` hook，把 23 個單一 phase 的 subagent 圍進各自的 phase 目錄、並禁用它們的 Bash（改用 Grep/Glob 與結構化編輯工具）；`/ars-mark-read` plugin 指令（#190）加一個 broken-on-arrival 修正（#195）；簡體中文 README（#185）；以及 CI 強化（#156/#155）。`academic-paper` 升至 v3.2.0、`academic-paper-reviewer` 升至 v1.10.0，反映 Commitment Ledger 與 domain profile 的新增功能；`academic-pipeline` 追 suite 至 v3.10.0。預設 skill 行為不變，除非使用者選用 strict 政策模式；唯一 default-on 的改動是 #134 guard，它約束的是被圍起來的 subagent，不是面向使用者的產出。
 
 ### v3.9.4.2（2026-05-19）— PR #149 CI 紀律 gate post-ship hotfix（codex post-ship）
 

@@ -7,9 +7,36 @@ A suite of Claude Code skills for rigorous academic research, paper writing, pee
 | Skill | Purpose | Key Modes |
 |-------|---------|-----------|
 | `deep-research` v2.9.4 | 13-agent research team | full, quick, socratic, review, lit-review, fact-check, systematic-review |
-| `academic-paper` v3.1.2 | 12-agent paper writing | full, plan, outline-only, revision, revision-coach, abstract-only, lit-review, format-convert, citation-check, disclosure |
-| `academic-paper-reviewer` v1.9.1 | Multi-perspective paper review (5 reviewers + optional cross-model DA critique) | full, re-review, quick, methodology-focus, guided, calibration |
-| `academic-pipeline` v3.9.4.2 | Full pipeline orchestrator | (coordinates all above) |
+| `academic-paper` v3.2.0 | 12-agent paper writing | full, plan, outline-only, revision, revision-coach, abstract-only, lit-review, format-convert, citation-check, disclosure |
+| `academic-paper-reviewer` v1.10.0 | Multi-perspective paper review (5 reviewers + optional cross-model DA critique) | full, re-review, quick, methodology-focus, guided, calibration |
+| `academic-pipeline` v3.11.0 | Full pipeline orchestrator | (coordinates all above) |
+
+## v3.11 Key Additions (#182 — deterministic citation verification gate)
+
+**External motivation:** Zhao et al. arXiv:2605.07723 (2026-05). #182 promotes a **deterministic citation-existence verification gate** that runs independently of LLM peer review, closing the lookup-channel half of the hallucinated-citation problem. v3.11 implements all five spec deltas; the gate **inherits the v3.10 `terminal_policies` opt-in model** rather than introducing a second hard-block philosophy.
+
+- **Four-index verification (Delta 1).** New `scripts/arxiv_client.py` adds arXiv (no API key) as the fourth resolver alongside Semantic Scholar / OpenAlex / Crossref. The v3.9.0 contamination triangulation matrix extends from three indexes (k=0..3) to four (k=0..4) with `arxiv_unmatched`; four new advisory suffixes render (`CONTAMINATED-ARXIV-UNMATCHED` at the k=1/k_max=1 arxiv-only carve-out, `CONTAMINATED-QUADRANGULATION-UNMATCHED` at k=4/k_max=4, + two PREPRINT compositions). All advisory — the refusal list is unchanged (R-L3-2-E).
+- **Persistent cache (Delta 2).** `scripts/verification_cache.py` — local SQLite (`~/.cache/ars/verification.db`, `ARS_VERIFICATION_CACHE_PATH` override, 90-day TTL) so each paper is verified once across drafts. New `/ars-cache-invalidate <citation_key>` command.
+- **`citation_existence` terminal policy (Delta 3 / C-V6).** New `terminal_policies` key `citation_existence` ∈ {`advisory`, `strict`} (per-key absence = advisory). The finalizer is the sole policy evaluator; `formatter_agent.md` rule 12 refuses on a `lookup_verified == false` row **only under `strict`**. `false` is narrowed to **ID-keyed unmatched** (C-V6(a)) — a title-only-unmatched legitimately-unindexed citation is `unresolvable`, never blocked (acknowledged precision-over-recall tradeoff, mirroring `strict_articles_only`). Detection is unconditional; only terminality is policy-gated.
+- **Unified status surface + standalone API (Delta 4+5).** `citation_verification_summary.schema.json` + `.py` write a per-citation `lookup_verified` ∈ {`true`, `false`, `unresolvable`} + `anchor_present` + `resolver_outcomes`. `scripts/verification_gate/__init__.py` + `scripts/verify_passport.py` extract the gate into a callable API + standalone CLI.
+
+Spec: `docs/design/2026-05-21-v3.10-182-promote-citation-gate-spec.md` (§0 v3.11 amendment + INVARIANT C-V6).
+
+## v3.10 Key Additions (#127 — triangulation policy layer)
+
+**External motivation:** Zhao et al. arXiv:2605.07723 (2026-05). v3.9.0 shipped three-index triangulation as advisory-only and explicitly deferred the policy layer (hard-block / strict modes). v3.10 ships it, rescoped after a first-party spec-collision audit (2026-05-31) that found `triangulation_policy` and the `R-L3-2-A` firm-rule wording were staked by two unshipped specs at once.
+
+**Two PRs.** PR-A (shipped) disambiguated the `R-L3-2-A/B/C` ID overload (renamed the borrowed claim-manifest copies to `R-CIM-A/B/C`) and stood up `shared/references/firm_rules.md` as the canonical firm-rule source + `check_firm_rules_sync.py`. PR-B (this) builds the policy layer on that base.
+
+**PR-B — terminal policy layer (opt-in; default byte-equivalent to v3.9.0):**
+
+- **Namespaced `terminal_policies` (D1).** New passport-level `shared/contracts/passport/terminal_policies.schema.json` (standalone — NEVER inside the entry schema, Invariant 11). `contamination_triangulation` ∈ {`advisory`, `strict`, `strict_articles_only`} (wired). `temporal_integrity` accepts only `advisory` (forward-reserved; a wired-less `strict` would be false safety, Invariant 3). Per-key absence = advisory (evaluator default, not a JSON-Schema `default`); whole-object absence = all-advisory = byte-equivalent v3.9.0 (Invariant 7).
+- **`venue_type` entry fields.** `venue_type` (closed enum incl. explicit `unknown`), `venue_type_provenance` (no `_inferred` values, R-L3-2-D), `venue_type_source` (required iff `trusted_source_declared`; lint-guarded against naming a lookup index — laundering guard). Adapter-declared only; pair dependencies bidirectional with a one-way `unknown ⟹ unknown` rule that still lets a known type carry `unknown` provenance.
+- **Hard-block at the emission boundary (D2).** The finalizer is the sole policy evaluator: it stamps a fully-encoded `policy_hash` on every ref marker and, under `strict`, co-emits a `TERMINAL-BLOCK severity=HIGH-BLOCK` token alongside (not replacing) the advisory suffix. `strict_articles_only` is a deliberate PRECISION mode (DOI + journal/conference venue + declared provenance; DOI-less / unknown-venue stays advisory by design). The formatter is a STAMP-ONLY two-gate (freshness + generic rule-11 refusal), never re-evaluating policy logic (Invariant 13). `HIGH-BLOCK` is terminal — not `/ars-mark-read` ack-able. Manual entries exempt (k=3 unreachable).
+- **Firm rule + sync (D3).** R-L3-2-A reworded to the broad default-advisory + opt-in-strict form in the canonical block; mirrors stay by-ID references (single-sourced), with a contradiction guard (scoped to the R-L3-2-A reference sentence, so the Collaboration Depth Observer's "never blocks" is not false-flagged).
+- **Migration + adapters + lint.** `migrate_literature_corpus_to_v3_10.py` deep-merge-seeds `terminal_policies` (idempotent, dry-run, no venue backfill). The three reference adapters declare `venue_type`. New `check_v3_10_policy.py` (alongside the v3.9.0 lint) + CI wiring.
+
+Spec: `docs/design/2026-05-31-ars-v3.10-policy-layer-rescope-spec.md`.
 
 ## v3.7.3 Key Additions (in progress)
 
@@ -230,7 +257,7 @@ Materials: Complete paper text. field_analyst_agent auto-detects domain and conf
 Materials: Editorial Decision Letter, Revision Roadmap, Per-reviewer detailed comments
 
 ## Version Info
-- **Suite version**: 3.9.4.2 (per CHANGELOG.md)
-- **Last Updated**: 2026-05-19
+- **Suite version**: 3.11.0 (per CHANGELOG.md)
+- **Last Updated**: 2026-06-04
 - **Author**: Cheng-I Wu
 - **License**: CC-BY-NC 4.0

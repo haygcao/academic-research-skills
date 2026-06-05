@@ -1,6 +1,6 @@
 # Academic Research Skills for Claude Code
 
-[![Version](https://img.shields.io/badge/version-v3.9.4.2-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.9.4.2)
+[![Version](https://img.shields.io/badge/version-v3.11.0-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.11.0)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Sponsor](https://img.shields.io/badge/sponsor-Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://buymeacoffee.com/crucify020v)
 
@@ -232,15 +232,15 @@ ARS Stage 2 写作      →  用验证过的实验结果撰写论文
 
 13 个 Agent 的研究团队。模式：full、quick、review、lit-review、fact-check、socratic、systematic-review。完整 agent 名单与产出物：见 ARCHITECTURE.md §3。
 
-### Academic Paper (v3.1.2)
+### Academic Paper (v3.2.0)
 
 12 个 Agent 的论文撰写 pipeline。模式：full、plan、outline-only、revision、revision-coach、abstract-only、lit-review、format-convert、citation-check、disclosure。输出：MD + DOCX（Pandoc 可用时）+ LaTeX（APA 7.0 `apa7` class / IEEE / Chicago）→ tectonic 编译 PDF。完整 agent 名单与各 phase 职责：见 ARCHITECTURE.md §3。
 
-### Academic Paper Reviewer (v1.9.1)
+### Academic Paper Reviewer (v1.10.0)
 
 7 个 Agent 的多视角审查，搭配 **0-100 质量量表**。模式：full、re-review、quick、methodology-focus、guided、calibration。**决策对照：** ≥80 接受、65-79 小修、50-64 大修、<50 退稿。第一轮审查团队 vs. 精简再审团队的分界：见 ARCHITECTURE.md §3 Stage 3 / Stage 3'。
 
-### Academic Pipeline (v3.9.4.2)
+### Academic Pipeline (v3.11.0)
 
 10 阶段调度器，含学术诚信验证、两阶段审查、苏格拉底指导、协作质量评估。Pipeline 保证：每个阶段都需用户确认 checkpoint；学术诚信验证（Stage 2.5 + 4.5）不可跳过；R&R 追溯矩阵（Schema 11）独立验证作者修订主张。v3.4 添加 Compliance Agent（PRISMA-trAIce + RAISE）于 Stage 2.5 / 4.5。v3.5 添加 **协作深度观察员**（`collaboration_depth_agent`，仅咨询性质、永不阻挡流程）于每一次 FULL/SLIM checkpoint 与 pipeline 完成时。MANDATORY 学术诚信闸门（2.5 / 4.5）明确跳过观察员，避免稀释合规检查。理论基础：Wang & Zhang (2026), IJETHE 23:11。逐阶段矩阵（agent、产出物、闸门）：见 ARCHITECTURE.md §3。
 
@@ -303,6 +303,16 @@ https://github.com/Imbad0202/academic-research-skills
 ---
 
 ## 更新纪录
+
+### v3.11.0（2026-06-04）— 确定性引用查验 gate（#182）
+
+> **[machine-translated]** 本条目为机器翻译，待母语 contributor 校订；以英文版 CHANGELOG 为准。
+
+> 新增一道**确定性的引用存在性查验 gate**，独立于 LLM 同侪审查运作。每笔引用都会比对最多四个书目索引（Semantic Scholar、OpenAlex、Crossref，以及新增的 **arXiv resolver**，`scripts/arxiv_client.py`，不需 API key），把每笔引用的 `lookup_verified` 状态（`{true, false, unresolvable}`）写进统一汇整。捏造、带着查不到的 DOI/arXiv ID 的引用，因此被 lookup 侦测标示出来（在用户选用 strict 时才升级为终止），而非寄望审查 agent 注意到。这道 gate **沿用 v3.10 `terminal_policies` 的 opt-in 模型**：侦测一律执行，但 `lookup_verified == false` 的列只有在用户选用 `terminal_policies.citation_existence == strict` 时才是终止性的；默认行为是 advisory、可用 `/ars-mark-read` 认可。`false` 的定义刻意**收窄到 ID-keyed unmatched**（一次以精确 DOI/arXiv 查验、却证实查不到），因此正当但未被索引的人文 / 非英语 / 区域期刊引用会落在 `unresolvable`、永不阻挡（这是文件中载明的「精确优先于召回」取舍）。本版另含持久化 SQLite 查验 cache（`~/.cache/ars/verification.db`，90 天 TTL）搭配 `/ars-cache-invalidate` 指令、独立的 `verification_gate` API 与 `verify_passport.py` CLI，以及把 v3.9.0 污染三角验证矩阵扩成四索引（k=0..4，全属 advisory）。`academic-pipeline` 追 suite 至 v3.11.0，其余三个 skill 版号不变。规格：`docs/design/2026-05-21-v3.10-182-promote-citation-gate-spec.md`（§0 amendment + C-V6）。
+
+### v3.10.0（2026-06-01）— 三角验证政策层、Kong 综述采纳、评测 harness、scoped-write guard
+
+> Minor release，打包数项工作：可选用的污染三角验证 **terminal 政策层**（#127，默认引用行为与 v3.9.0 byte-equivalent）；**Kong et al. 2026 综述采纳**，包含 Rebuttal Commitment Ledger（#256/#266/#268/#269）与依学门的 domain evidence profile（#259）；**v3.10 量测基建**，通用化评测 gold set 加 ranking-lift CI gate（#184）；**scoped-write guard MVP**（#134），一个 deterministic `PreToolUse` hook，把 23 个单一 phase 的 subagent 围进各自的 phase 目录、并禁用它们的 Bash（改用 Grep/Glob 与结构化编辑工具）；`/ars-mark-read` plugin 指令（#190）加一个 broken-on-arrival 修正（#195）；简体中文 README（#185）；以及 CI 强化（#156/#155）。`academic-paper` 升至 v3.2.0、`academic-paper-reviewer` 升至 v1.10.0，反映 Commitment Ledger 与 domain profile 的新增功能；`academic-pipeline` 追 suite 至 v3.10.0。默认 skill 行为不变，除非用户选用 strict 政策模式；唯一 default-on 的改动是 #134 guard，它约束的是被围起来的 subagent，不是面向用户的产出。
 
 ### v3.9.4.2（2026-05-19）— PR #149 CI 纪律 gate post-ship hotfix（codex post-ship）
 
